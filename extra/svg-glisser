@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'rexml/document'
+
+include REXML
+
+class MoveTo
+
+  @c1x = 0
+  @c1y = 0
+
+  attr_accessor :c1x, :c1y
+
+  def to_s
+    "glissMoveTo2d (#{@c1x}, #{@c1y});"
+  end
+end
+
+class CubicTo
+
+  @c1x = 0
+  @c1y = 0
+  @c2x = 0
+  @c2y = 0
+  @c3x = 0
+  @c3y = 0
+
+  attr_accessor :c1x, :c1y, :c2x, :c2y, :c3x, :c3y
+
+  def to_s
+    "glissCubicTo6d (#{@c3x}, #{@c3y}, #{@c2x}, #{@c2y}, #{@c1x}, #{@c1y});"
+  end
+end
+
+class LineTo
+
+  @c1x = 0
+  @c1y = 0
+
+  attr_accessor :c1x, :c1y
+
+  def to_s
+    "glissLineTo2d (#{@c1x}, #{@c1y});"
+  end
+end
+
+# Do initial check for arguments passed
+if ARGV.length < 1
+  puts "No input file specified. Aborting."
+  exit 1
+end
+
+begin
+  doc = Document.new(File.new(ARGV[0]))
+
+  token = :idle
+  current = nil
+  skipped_tokens = 0
+
+  doc.elements.each('/svg/path') do |ele|
+    path_data = ele.attributes["d"]
+
+    path_data.split(/[, ]\s*/).each { |val|
+
+      if token != :idle then 
+
+        case token
+        when :read_3x
+          current.c3x = val
+          token = :read_3y
+        when :read_3y
+          current.c3y = val
+          token = :read_2x
+        when :read_2x
+          current.c2x = val
+          token = :read_2y
+        when :read_2y
+          current.c2y = val
+          token = :read_1x
+        when :read_1x
+          current.c1x = val
+          token = :read_1y
+        when :read_1y
+          current.c1y = val
+          token = :complete
+        end
+      else
+
+        case val
+        when 'M'
+          token = :read_1x
+          current = MoveTo.new
+        when 'C'
+          token = :read_3x
+          current = CubicTo.new
+        when 'L'
+          token = :read_1x
+          current = LineTo.new
+        else
+          skipped_tokens = skipped_tokens + 1
+        end
+      end
+
+      if token == :complete then 
+        puts current
+        current = nil
+        token = :idle
+      end
+    }
+  end
+
+  if skipped_tokens > 0 then
+    puts "// Skipped tokens: #{skipped_tokens}"
+  end
+
+rescue
+  puts "Failed to parse the XML file. Aborting."
+  exit 1
+end
